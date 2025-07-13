@@ -42,7 +42,7 @@ class OpenAIEmbedder(Embedder):
     def embed_and_save(self, input_path: str, output_path: str):
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         docs = self.load_documents(input_path)
-        texts = [doc["summary"] for doc in docs]
+        texts = [doc["abstract"] for doc in docs]
 
         print(f"Embedding {len(texts)} documents...")
 

@@ -5,7 +5,10 @@ from pydantic_ai.models.openai import OpenAIResponsesModel
 import os
 from typing import List, Dict
 import glob
+from .core.summarizer import Summarizer
 from .core.openai_summarizer import OpenAISummarizer
+from .embed.embedder import Embedder
+from .embed.openai_embedder import OpenAIEmbedder
 
 class Pipeline:
     model_name = None
@@ -128,16 +131,28 @@ class Pipeline:
     
     ######
     # Embedding methods
-    def get_embedder(self):        
-        pass
+    def get_embedder(self) -> Embedder:        
+        if self.embedder is not None:
+            return self.embedder
 
-    def embed(self):
-        pass
+        if self.model_name == "openai":
+            from .embed.openai_embedder import OpenAIEmbedder
+            self.embedder = OpenAIEmbedder(OpenAI(), self.model_spec)
+        else:
+            raise ValueError(self._unsupported_model_error(self.model))
+
+        return self.embedder
+
+    def embed(self, text: str):
+        if self.embedder is None:
+            self.get_embedder()
+        
+        self.embedder.embed_and_save(text)
     ######
 
     ######
     # Summarization methods
-    def get_summarizer(self):
+    def get_summarizer(self) -> Summarizer:
         if self.summarizer is not None:
             return self.summarizer
         
@@ -148,9 +163,8 @@ class Pipeline:
 
         return self.summarizer
     
-    def summarize(self):
+    def summarize(self, agent_class: str = "summarizers"):
         self.summarizer.load_papers
-        pass
     ######
 
     ######

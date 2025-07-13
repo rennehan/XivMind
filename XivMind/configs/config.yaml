@@ -9,3 +9,28 @@ paths:
     openai: XivMind/data/embeddings/openai
   faiss:
     openai: XivMind/data/faiss/openai
+files:
+  arxiv:
+    metadata: arxiv-metadata-oai-snapshot.json
+    index: arxiv-metadata-index.pkl
+    summaries: arxiv-summaries.json
+  embeddings:
+    openai: openai-embeddings.pkl
+  faiss:
+    openai: openai-faiss.index
+fields:
+  metadata:
+    - id
+    - submitter
+    - authors
+    - title
+    - comments
+    - journal-ref
+    - doi
+    - report-no
+    - categories
+    - license
+    - abstract
+    - versions
+    - update_date
+    - authors_parsed
