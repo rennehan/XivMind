@@ -3,7 +3,7 @@ import json
 import time
 from tqdm import tqdm
 import os
-from summarize.summarizer import Summarizer
+from summarizer import Summarizer
 from openai import OpenAI
 
 class OpenAISummarizer(Summarizer):

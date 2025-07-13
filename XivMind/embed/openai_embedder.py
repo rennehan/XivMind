@@ -5,7 +5,7 @@ from tqdm import tqdm
 import os
 import time
 from openai import OpenAI
-from embed.embedder import Embedder
+from embedder import Embedder
 
 class OpenAIEmbedder(Embedder):
     def __init__(self, client: OpenAI = None,
@@ -15,6 +15,9 @@ class OpenAIEmbedder(Embedder):
         self.client = client or OpenAI()
 
     def load_documents(self, path: str) -> List[Dict]:
+        """
+        Loads a document from a JSON file.
+        """
         with open(path, "r") as f:
             return json.load(f)
 

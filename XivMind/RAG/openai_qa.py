@@ -4,7 +4,7 @@ import numpy as np
 import json
 from typing import List, Tuple
 from openai import OpenAI
-from RAG.qa import QA
+from qa import QA
 
 class OpenAIQA(QA):
     def __init__(self, client: OpenAI = None):

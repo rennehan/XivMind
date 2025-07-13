@@ -1,9 +1,4 @@
-import embed.openai_embedder as openai_embedder
-import summarize.openai_summarizer as openai_summarizer
-import search.faiss_index as faiss_index
-import RAG.openai_qa as openai_qa
-from openai import OpenAI
-from pipeline import Pipeline
+from XivMind.pipeline import Pipeline
 
 # Only have OpenAI implemented right now
 valid_models = ["OpenAI"]
@@ -26,24 +21,34 @@ if __name__ == "__main__":
 
     model_name = request_model_from_user()
 
-    pipeline = Pipeline(model_name)
+    # Create pipeline configuration
+    # TODO: Load from file or env
+    config = {
+        "model_name": model_name,
+        "model_spec": "gpt-3.5-turbo",
+        "agents_path": "./XivMind/configs/agents",
+        "dataset_path": "./data"
+    }
+
+    pipeline = Pipeline(config)
+    pipeline.load_agents()
 
     # Embed documents
-    pipeline.embed()
+    #pipeline.embed()
 
     # Summarize documents
-    pipeline.summarize()
+    #pipeline.summarize()
 
     # Build FAISS index
-    pipeline.build_faiss_index()
+    #pipeline.build_faiss_index()
 
-    while True:
-        # Run RAG query
-        answer, sources = pipeline.rag_qa()
+    #while True:
+    #    # Run RAG query
+    #    answer, sources = pipeline.rag_qa()
         
-        print("\n📘 Answer:\n", answer)
-        print("\n🔍 Sources:\n")
-        for i, paper in enumerate(sources, 1):
-            print(f"{i}. {paper['title']} ({paper["pdf_url"]})")
-        print("\n")
+    #    print("\n📘 Answer:\n", answer)
+    #    print("\n🔍 Sources:\n")
+    #    for i, paper in enumerate(sources, 1):
+    #        print(f"{i}. {paper['title']} ({paper["pdf_url"]})")
+    #    print("\n")
 
