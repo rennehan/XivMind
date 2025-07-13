@@ -10,11 +10,24 @@ from .core.openai_summarizer import OpenAISummarizer
 class Pipeline:
     model_name = None
     model_spec = None
+    models = None
     config = None
     agents = None
     summarizer = None
 
-    def __init__(self, model: str):
+    def __init__(self, model: str = None):
+        # Load main paths for the pipeline
+        self.config = yaml.load(open("./XivMind/configs/config.yaml", "r"), 
+                                Loader=yaml.FullLoader)
+        self.models = self.config["supported_models"]
+
+        # Allow Pipeline tests with a direct input.
+        if model is None:
+            return
+        else:
+            self.prepare_model(model)
+
+    def prepare_model(self, model: str):
         try:
             model_decomposition = model.split(":")
         except Exception as e:
@@ -27,11 +40,6 @@ class Pipeline:
         self.model_name = model_decomposition[0].lower()
         self.model_spec = model_decomposition[1]
 
-        # Load main paths for the pipeline
-        self.config = yaml.load(open("./XivMind/configs/config.yaml", "r"), 
-                                Loader=yaml.FullLoader)
-        self.models = self.config["supported_models"]
-
         if self.model_name in self.models:
             if self.model_name == "openai":
                 self.model = OpenAIResponsesModel(self.model_spec)
@@ -39,6 +47,23 @@ class Pipeline:
                 raise NotImplementedError(self._unimplemented_model_error(self.model_name))
         else:
             raise ValueError(self._unsupported_model_error(self.model_name))
+        
+    def request_model_from_user(self):
+        if self.models is None:
+            raise NotImplementedError("No models available. Please check the configuration file.")
+        
+        print("Enter an available model name.")
+        model_name = input("Model name: ").strip()
+
+        if model_name.lower() not in [m.lower() for m in self.models]:
+            print(f"Unsupported model: {model_name}.")
+            print(f"Available models: {', '.join(self.models)}")
+            print("Please check your input and try again.")
+
+        # Incorporate the model into the pipeline
+        self.prepare_model(model_name)
+
+        return model_name
 
     def load_agents(self, agent_class: List | str = "all", cache: bool = True):
         agent_path = self.config["paths"]["agents"]
