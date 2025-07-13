@@ -21,16 +21,7 @@ if __name__ == "__main__":
 
     model_name = request_model_from_user()
 
-    # Create pipeline configuration
-    # TODO: Load from file or env
-    config = {
-        "model_name": model_name,
-        "model_spec": "gpt-3.5-turbo",
-        "agents_path": "./XivMind/configs/agents",
-        "dataset_path": "./data"
-    }
-
-    pipeline = Pipeline(config)
+    pipeline = Pipeline("OpenAI:gpt-3.5-turbo")
     pipeline.load_agents()
 
     # Embed documents

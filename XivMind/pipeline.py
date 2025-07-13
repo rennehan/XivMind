@@ -5,26 +5,43 @@ from pydantic_ai.models.openai import OpenAIResponsesModel
 import os
 from typing import List, Dict
 import glob
+from .core.openai_summarizer import OpenAISummarizer
 
 class Pipeline:
-    models = ["openai"]
+    model_name = None
+    model_spec = None
+    config = None
     agents = None
+    summarizer = None
 
-    def __init__(self, config: Dict):
-        self.config = config
+    def __init__(self, model: str):
+        try:
+            model_decomposition = model.split(":")
+        except Exception as e:
+            raise ValueError(self._model_format_error(model)) from e
+
+        if len(model_decomposition) != 2:
+            raise ValueError(self._model_format_error(model))
 
         # These are useful in several cases
-        self.model_name = config["model_name"].lower()
-        self.model_spec = config["model_spec"]
+        self.model_name = model_decomposition[0].lower()
+        self.model_spec = model_decomposition[1]
 
-        if self.model_name == "openai":
-            self.model = OpenAIResponsesModel(config["model_spec"])
+        # Load main paths for the pipeline
+        self.config = yaml.load(open("./XivMind/configs/config.yaml", "r"), 
+                                Loader=yaml.FullLoader)
+        self.models = self.config["supported_models"]
+
+        if self.model_name in self.models:
+            if self.model_name == "openai":
+                self.model = OpenAIResponsesModel(self.model_spec)
+            else:
+                raise NotImplementedError(self._unimplemented_model_error(self.model_name))
         else:
-            model_name = config["model_name"]
-            raise ValueError(f"Unsupported model: {model_name}. Supported models: {', '.join(self.models)}")
+            raise ValueError(self._unsupported_model_error(self.model_name))
 
     def load_agents(self, agent_class: List | str = "all", cache: bool = True):
-        agent_path = self.config["agents_path"]
+        agent_path = self.config["paths"]["agents"]
         print(f"Loading agents from: {agent_path}")
 
         if not isinstance(agent_class, List):
@@ -72,7 +89,18 @@ class Pipeline:
                     self.model_name + ":" + self.model_spec,
                     system_prompt=agent_config["instructions"]
                 )
-        
+    
+    def _unimplemented_model_error(model_name) -> str:
+        return (f"Model '{model_name}' is not yet implemented but the configuration"
+                " exists. The model should be removed from the configuration.")
+
+    def _model_format_error(self, model_input: str) -> str:
+        return (f"Model specification '{model_input}' is invalid. Use the format "
+                "'ModelName:ModelSpec', e.g., 'OpenAI:gpt-3.5-turbo'")
+    
+    def _unsupported_model_error(self, model_name: str) -> str:
+        return f"Unsupported model: {model_name}. Supported models: {', '.join(self.models)}"
+    
     ######
     # Embedding methods
     def get_embedder(self):        
@@ -85,9 +113,18 @@ class Pipeline:
     ######
     # Summarization methods
     def get_summarizer(self):
-        pass
+        if self.summarizer is not None:
+            return self.summarizer
+        
+        if self.model_name == "openai":
+            self.summarizer = OpenAISummarizer(OpenAI(), self.model_spec)
+        else:
+            raise ValueError(self._unsupported_model_error(self.model))
+
+        return self.summarizer
     
     def summarize(self):
+        self.summarizer.load_papers
         pass
     ######
 

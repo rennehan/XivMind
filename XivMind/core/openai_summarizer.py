@@ -3,7 +3,7 @@ import json
 import time
 from tqdm import tqdm
 import os
-from summarizer import Summarizer
+from XivMind.core.summarizer import Summarizer
 from openai import OpenAI
 
 class OpenAISummarizer(Summarizer):

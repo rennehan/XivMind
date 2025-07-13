@@ -1,0 +1,11 @@
+supported_models:
+  - openai
+paths:
+  agents: XivMind/configs/agents
+  arxiv:
+    metadata: XivMind/data/arxiv
+    summaries: XivMind/data/arxiv/summaries
+  embeddings:
+    openai: XivMind/data/embeddings/openai
+  faiss:
+    openai: XivMind/data/faiss/openai
