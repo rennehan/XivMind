@@ -5,6 +5,7 @@ import json
 import pickle
 import yaml
 from tqdm import tqdm
+import datetime as dt
 
 class MetaDataManager:
     config = None
@@ -31,7 +32,7 @@ class MetaDataManager:
         
         return self.config
     
-    def load_metadata(self, fields: List[str] = [], limit: int = None):
+    def load_metadata(self, fields: List[str] = [], limit: int = None, ids: Dict = None) -> defaultdict:
         if len(fields) == 0:
             fields = self.config["fields"]["metadata"]
             print("Assuming all fields are requested:")
@@ -45,9 +46,14 @@ class MetaDataManager:
         papers = defaultdict(lambda: defaultdict)
 
         with open(self._get_metadata_file_path(self.file_name), "r") as f:
-            for line in f:
+            for line in tqdm(f, desc="Loading all metadata."):
                 try:
                     paper = json.loads(line)
+
+                    # ID filter to easily use the metadata search index
+                    if ids and ids.get(paper["id"]):
+                        continue
+
                     paper_data = {field: paper[field] for field in fields if field != "id"}
                     papers[paper["id"]] = paper_data
 
@@ -77,8 +83,15 @@ class MetaDataManager:
                 # TODO: Consider multi-category indexing.
                 id = paper["id"]
                 category = paper["categories"].split()[0]
-                date = paper["update_date"]
-          
+
+                # Indexing by the latest version is important for context,
+                # because older versions could be incorrect and modified 
+                # after acceptance to a journal.
+                versions = paper["versions"]
+                latest_version = len(versions) - 1
+                date = dt.datetime.strptime(versions[latest_version]["created"], 
+                                            self.config["date_formats"]["arxiv"]["metadata"])
+
                 if id and category and date:
                     if category not in index:
                         index[category] = {}
@@ -161,15 +174,12 @@ class MetaDataManager:
             # These are all of the possible dates in the matching category
             category_dates = list(self.index[category].keys())
 
-            # Convert the date strings to datetime objects for comparison
-            date_objects = [dt.datetime.strptime(date_str, self.date_format) for date_str in category_dates]
-
             # Go over all of the dates possible in this category and check
             # whether or not they are in the specified date range. If they are 
             # in the date range, store the results in the results dictionary that
             # has the same shape as the index itself.
-            for i, date_object in enumerate(date_objects):
-                if date_range[0] <= date_object <= date_range[1]:
+            for i, category_date in enumerate(category_dates):
+                if date_range[0] <= category_date <= date_range[1]:
                     if category not in results:
                         results[category] = {}
                     # Store the results in the same dictionary shape as the 

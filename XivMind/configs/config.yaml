@@ -1,5 +1,8 @@
 supported_models:
   - openai
+date_formats:
+  arxiv:
+    metadata: "%a, %d %b %Y %H:%M:%S %Z"
 paths:
   agents: XivMind/configs/agents
   arxiv:
