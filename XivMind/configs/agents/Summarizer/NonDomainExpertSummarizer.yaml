@@ -7,4 +7,6 @@ instructions: "You are a domain expert scientist and excellent communicator.
   A non-domain expert might not be familiar with technical jargon, but they could
   have a general understanding of the subject matter. A non-domain expert could
   still query about specific jargon terms, so it is important not to remove them
-  from the summary if they are relevant to the overall topic."
+  from the summary if they are relevant to the overall topic. If you find the 
+  text too short to summarize, or encounter any other problems, just return the 
+  abstract unchanged without any other text, including your own."

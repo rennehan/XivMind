@@ -5,10 +5,9 @@ from pydantic_ai.models.openai import OpenAIResponsesModel
 import os
 from typing import List, Dict
 import glob
-from .core.summarizer import Summarizer
-from .core.openai_summarizer import OpenAISummarizer
 from .embed.embedder import Embedder
 from .embed.openai_embedder import OpenAIEmbedder
+import asyncio
 
 class Pipeline:
     model_name = None
@@ -81,6 +80,11 @@ class Pipeline:
             else:
                 agent_classes = [agent_class]
 
+        # Standard format for XivMind is to have the agents have all
+        # lowercase names.
+        for i, agent_class in enumerate(agent_classes):
+            agent_classes[i] = agent_class.lower()
+
         if self.agents is None:
             self.agents = {}
 
@@ -115,7 +119,9 @@ class Pipeline:
                 # TODO: Configure the agent parameters
                 self.agents[agent_classes[i]][agent_name] = Agent(
                     self.model_name + ":" + self.model_spec,
-                    system_prompt=agent_config["instructions"]
+                    # NOTE: Instructions are specific to each agent here and
+                    # it is important that they are not shared across agents.
+                    instructions=agent_config["instructions"]
                 )
     
     def _unimplemented_model_error(model_name) -> str:
@@ -150,21 +156,58 @@ class Pipeline:
         self.embedder.embed_and_save(text)
     ######
 
-    ######
-    # Summarization methods
-    def get_summarizer(self) -> Summarizer:
-        if self.summarizer is not None:
-            return self.summarizer
+    ######    
+    async def summarize_text(self, text: List[str] | str, agent_class: str = "summarizer", 
+                             agent_name: str = None,
+                             max_concurrent: int = 5) -> str:
+        if agent_class not in self.agents.keys():
+            raise ValueError(f"Agent class '{agent_class}' not found. Available classes: {list(self.agents.keys())}")
         
-        if self.model_name == "openai":
-            self.summarizer = OpenAISummarizer(OpenAI(), self.model_spec)
-        else:
-            raise ValueError(self._unsupported_model_error(self.model))
+        if agent_name is not None:
+            if agent_name not in self.agents[agent_class].keys():
+                raise ValueError(f"Agent name '{agent_name}' not found in class '{agent_class}'. Available agents: {list(self.agents[agent_class].keys())}")
 
-        return self.summarizer
-    
-    def summarize(self, agent_class: str = "summarizers"):
-        self.summarizer.load_papers
+            agent_names = [agent_name]
+        else:
+            agent_names = list(self.agents[agent_class].keys())
+
+        # Always process input text as a list
+        if isinstance(text, str):
+            text = [text]
+
+        # If no API limit is set, use the default from the config file. By
+        # default, try to limit the number of max concurrent requests to 1/100
+        # of the per-minute limit.
+        if max_concurrent is None:
+            model_name = self.model_name.lower()
+            max_concurrent = int(self.config["API"][model_name]["max_concurrent_requests"])
+            if max_concurrent == 0:
+                max_concurrent = 1
+
+        semaphore = asyncio.Semaphore(max_concurrent)
+        summaries = {name: [""] * len(text) for name in agent_names}
+
+        async def run_agent(agent_name: str, model_input: str, idx: int):
+            async with semaphore:
+                try:
+                    result = await self.agents[agent_class][agent_name].run(model_input)
+                    result = result.output
+                except Exception as e:
+                    result = f"XIVMIND_ERROR: '{agent_name}': {e}"
+                
+                return agent_name, result, idx
+            
+        tasks = [run_agent(agent_name, model_input, idx) 
+                 for agent_name in agent_names 
+                 for idx, model_input in enumerate(text)]
+
+        model_outputs = await asyncio.gather(*tasks)
+
+        for agent_name, model_output, idx in model_outputs:
+            summaries[agent_name][idx] = model_output
+
+        return summaries
+
     ######
 
     ######

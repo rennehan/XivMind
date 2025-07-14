@@ -1,5 +1,17 @@
 supported_models:
   - openai
+API:
+  default:
+    rate_limit_tokens_per_minute: 100000
+    rate_limit_requests_per_minute: 250
+    rate_limit_requests_per_day: 5000
+  openai:
+    gpt-3.5-turbo:
+      max_concurrent_requests: 20
+      rate_limit_tokens_per_minute: 200000
+      rate_limit_requests_per_minute: 500
+      rate_limit_requests_per_day: 10000
+
 date_formats:
   arxiv:
     metadata: "%a, %d %b %Y %H:%M:%S %Z"
@@ -16,11 +28,14 @@ files:
   arxiv:
     metadata: arxiv-metadata-oai-snapshot.json
     index: arxiv-metadata-index.pkl
-    summaries: arxiv-summaries.json
-  embeddings:
-    openai: openai-embeddings.pkl
+    summaries: arxiv-summaries.db
+    embeddings: arxiv-summaries.db
   faiss:
     openai: openai-faiss.index
+sql:
+  main-path: XivMind/configs/sql_queries
+  create-summaries-table: create-summaries-table.sql
+  insert-summary: insert-summary.sql
 fields:
   metadata:
     - id

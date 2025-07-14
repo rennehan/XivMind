@@ -5,7 +5,7 @@ from tqdm import tqdm
 import os
 import time
 from openai import OpenAI
-from embedder import Embedder
+from .embedder import Embedder
 
 class OpenAIEmbedder(Embedder):
     def __init__(self, client: OpenAI = None,
