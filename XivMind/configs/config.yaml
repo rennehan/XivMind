@@ -1,5 +1,7 @@
 supported_models:
   - openai
+supported_embedding_models:
+  - openai
 API:
   default:
     rate_limit_tokens_per_minute: 100000

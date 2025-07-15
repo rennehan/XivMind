@@ -1,6 +1,7 @@
 from XivMind.backend import DataPipeline
 from XivMind.pipeline import Pipeline
 from XivMind.arxiv.metadatamanager import MetaDataManager
+from XivMind.core.embed.openai_embedder import OpenAIEmbedder
 import datetime as dt
 import os
 import asyncio
@@ -40,17 +41,34 @@ if __name__ == "__main__":
                 ids.update({id: None})
 
     async def get_summaries(papers, agent_name):
-        return await data_pipeline.summarize_abstracts(papers, agent_name=agent_name
-                                                       )
+        return await data_pipeline.summarize_abstracts(papers, agent_name=agent_name)
+
     papers = data_pipeline.load_metadata(fields=["title", "abstract"],
                                          ids=ids)
     
     pipeline = Pipeline("OpenAI:gpt-3.5-turbo")
     data_pipeline.load_pipeline(pipeline, load_agents=True)
 
-    summaries = asyncio.run(get_summaries(papers, agent_name="DomainExpertSummarizer"))
+    # TODO: Choose a different summarizer based on the config
+    summarizer_name = "DomainExpertSummarizer"
 
+    summaries = asyncio.run(get_summaries(papers, agent_name=summarizer_name))
+
+    # TODO: Check if already in the cache
     data_pipeline.cache_summaries(summaries, papers)
+
+    # TODO: Choose a different embedder based on the config
+    embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=20)
+
+    async def embed_texts(embedder, texts):
+        return await embedder.embed_text(texts)
+    
+    # Now embed the summaries
+    embeddings = asyncio.run(embed_texts(embedder, [summary for _, summary in summaries[summarizer_name]]))
+
+    data_pipeline.cache_embeddings(embeddings, papers, summaries)
+
+    print("Done!")
 
     
     

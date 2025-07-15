@@ -1,13 +1,12 @@
-from openai import OpenAI
+from openai import AsyncOpenAI
 import yaml
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIResponsesModel
 import os
-from typing import List, Dict
+from typing import List
 import glob
-from .embed.embedder import Embedder
-from .embed.openai_embedder import OpenAIEmbedder
 import asyncio
+from .core.embed.embedder import Embedder
 
 class Pipeline:
     model_name = None
@@ -17,26 +16,51 @@ class Pipeline:
     agents = None
     summarizer = None
 
-    def __init__(self, model: str = None):
+    def __init__(self, model: str = None, embedding_model: str = None):
         # Load main paths for the pipeline
         self.config = yaml.load(open("./XivMind/configs/config.yaml", "r"), 
                                 Loader=yaml.FullLoader)
         self.models = self.config["supported_models"]
-
+        self.embedding_models = self.config["supported_embedding_models"]
+    
         # Allow Pipeline tests with a direct input.
-        if model is None:
+        if model is None and embedding_model is None:
             return
-        else:
+        
+        if model is not None:
             self.prepare_model(model)
+        if embedding_model is not None:
+            self.prepare_embedding_model(embedding_model)
 
-    def prepare_model(self, model: str):
+    ######
+    # Error handling methods
+    def _unimplemented_model_error(model_name) -> str:
+        return (f"Model '{model_name}' is not yet implemented but the configuration"
+                " exists. The model should be removed from the configuration.")
+
+    def _model_format_error(model_input: str) -> str:
+        return (f"Model specification '{model_input}' is invalid. Use the format "
+                "'ModelName:ModelSpec', e.g., 'OpenAI:gpt-3.5-turbo'")
+
+    def _unsupported_model_error(model_name: str) -> str:
+        return f"Unsupported model: {model_name}. Supported models: {', '.join(self.models)}"
+    ######
+
+    ######
+    # Model preparation methods
+    def _decompose_model(self, text: str) -> List[str]:
         try:
-            model_decomposition = model.split(":")
+            text_decomposition = text.split(":")
         except Exception as e:
-            raise ValueError(self._model_format_error(model)) from e
+            raise ValueError(self._model_format_error(text)) from e
 
-        if len(model_decomposition) != 2:
-            raise ValueError(self._model_format_error(model))
+        if len(text_decomposition) != 2:
+            raise ValueError(self._model_format_error(text))
+
+        return text_decomposition
+    
+    def prepare_model(self, model: str):
+        model_decomposition = self._decompose_model(model)
 
         # These are useful in several cases
         self.model_name = model_decomposition[0].lower()
@@ -50,6 +74,21 @@ class Pipeline:
         else:
             raise ValueError(self._unsupported_model_error(self.model_name))
         
+    def prepare_embedding_model(self, embedding_model: str):
+        embedding_model_decomposition = self._decompose_model(embedding_model)
+
+        embedding_model = embedding_model_decomposition[0].lower()
+        embedding_model_spec = embedding_model_decomposition[1]
+
+        if embedding_model in self.embedding_models:
+            if embedding_model == "openai":
+                self.embedding_model = AsyncOpenAI(model=embedding_model_spec)
+            else:
+                raise NotImplementedError(self._unimplemented_model_error(embedding_model))
+        else:
+            raise ValueError(self._unsupported_model_error(embedding_model))
+    ######
+
     def request_model_from_user(self):
         if self.models is None:
             raise NotImplementedError("No models available. Please check the configuration file.")
@@ -124,17 +163,6 @@ class Pipeline:
                     instructions=agent_config["instructions"]
                 )
     
-    def _unimplemented_model_error(model_name) -> str:
-        return (f"Model '{model_name}' is not yet implemented but the configuration"
-                " exists. The model should be removed from the configuration.")
-
-    def _model_format_error(self, model_input: str) -> str:
-        return (f"Model specification '{model_input}' is invalid. Use the format "
-                "'ModelName:ModelSpec', e.g., 'OpenAI:gpt-3.5-turbo'")
-    
-    def _unsupported_model_error(self, model_name: str) -> str:
-        return f"Unsupported model: {model_name}. Supported models: {', '.join(self.models)}"
-    
     ######
     # Embedding methods
     def get_embedder(self) -> Embedder:        
@@ -142,8 +170,9 @@ class Pipeline:
             return self.embedder
 
         if self.model_name == "openai":
-            from .embed.openai_embedder import OpenAIEmbedder
-            self.embedder = OpenAIEmbedder(OpenAI(), self.model_spec)
+            from openai import AsyncOpenAI
+            from .core.embed.openai_embedder import OpenAIEmbedder
+            self.embedder = OpenAIEmbedder(AsyncOpenAI(), self.model_spec)
         else:
             raise ValueError(self._unsupported_model_error(self.model))
 
@@ -153,7 +182,7 @@ class Pipeline:
         if self.embedder is None:
             self.get_embedder()
         
-        self.embedder.embed_and_save(text)
+        self.embedder.embed_text(text)
     ######
 
     ######    

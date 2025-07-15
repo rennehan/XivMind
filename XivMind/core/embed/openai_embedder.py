@@ -45,11 +45,11 @@ class OpenAIEmbedder(Embedder):
 
         return embeddings
     
-    def embed_text(self, texts: List[str] | str) -> List[List[float]]:
+    async def embed_text(self, texts: List[str] | str) -> List[List[float]]:
         if isinstance(texts, str):
             texts = [texts]
         
         if isinstance(self.client, AsyncOpenAI):
-            return asyncio.run(self.embed_text_async(texts))
+            return await self._embed_text_async(texts)
         else:
             return self._embed_text_sync(texts)
