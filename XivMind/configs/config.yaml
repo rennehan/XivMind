@@ -36,6 +36,16 @@ sql:
   main-path: XivMind/configs/sql_queries
   create-summaries-table: create-summaries-table.sql
   insert-summary: insert-summary.sql
+  select-summaries-by-primary-key: select-summaries-by-primary-key.sql
+  select-all-summaries: select-all-summaries.sql
+  select-summaries-by-full-model: select-summaries-by-full-model.sql
+  select-summaries-by-summarizer: select-summaries-by-summarizer.sql
+  select-summaries-by-arxiv-id: select-summaries-by-arxiv-id.sql
+  select-summaries-by-full-model-and-arxiv-id: select-summaries-by-full-model-and-arxiv-id.sql
+  select-summaries-by-summarizer-and-full-model: select-summaries-by-summarizer-and-full-model.sql
+  select-summaries-by-summarizer-and-arxiv-id: select-summaries-by-summarizer-and-arxiv-id.sql
+  select-summaries-by-summarizer-and-full-model-and-arxiv-id: select-summaries-by-summarizer-and-full-model-and-arxiv-id.sql
+arxiv:
 fields:
   metadata:
     - id
