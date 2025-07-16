@@ -3,7 +3,7 @@ import datetime as dt
 from collections import defaultdict
 import json
 import pickle
-import yaml
+from yaml import safe_load as load_config
 from tqdm import tqdm
 import datetime as dt
 
@@ -13,8 +13,7 @@ class MetaDataManager:
         self.file_name = file_name
         self.date_format = "%Y-%m-%d"
         self.index = {}
-        self.config = yaml.load(open("./XivMind/configs/config.yaml", "r"), 
-                                Loader=yaml.FullLoader)
+        self.config = load_config(open("./XivMind/configs/config.yaml", "r"))
     
     def _get_metadata_file_path(self, file_name: str) -> str:
         return f"{self.config["paths"]["arxiv"]["metadata"]}/{file_name}"

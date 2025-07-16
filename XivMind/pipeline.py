@@ -1,5 +1,5 @@
 from openai import AsyncOpenAI
-import yaml
+from yaml import safe_load as load_config
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIResponsesModel
 import os
@@ -18,8 +18,7 @@ class Pipeline:
 
     def __init__(self, model: str = None, embedding_model: str = None):
         # Load main paths for the pipeline
-        self.config = yaml.load(open("./XivMind/configs/config.yaml", "r"), 
-                                Loader=yaml.FullLoader)
+        self.config = load_config(open("./XivMind/configs/config.yaml", "r"))
         self.models = self.config["supported_models"]
         self.embedding_models = self.config["supported_embedding_models"]
     
@@ -152,8 +151,7 @@ class Pipeline:
 
                 print(f"Loading {agent_classes[i]} agent: {agent_name}")
 
-                agent_config = yaml.load(open(file_path, "r"), 
-                                        Loader=yaml.FullLoader)
+                agent_config = load_config(open(file_path, "r"))
                 
                 # TODO: Configure the agent parameters
                 self.agents[agent_classes[i]][agent_name] = Agent(
