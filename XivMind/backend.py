@@ -194,18 +194,18 @@ class DataPipeline:
             print(f"Checking for cached summaries for model {full_model_name}.")
             cached_summaries = {}
             cached_lookup = {}
-            cached_summaries_count = 0
 
             for paper_id in papers.keys():
                 keys_values.append((agent_name, full_model_name, paper_id) if agent_name is not None else (full_model_name, paper_id))
 
+            # Returns dict[summarizer_name] = list(tuple(paper_id, summary_text))
             results = self.load_summaries(
                 keys=keys,
                 keys_values=keys_values
             )
 
             if len(results) > 0:
-                cached_summaries_count += len(results)
+                cached_summaries_count = 0
                 # load_summaries() returns a dictionary that maps
                 # the summarizer name to a list of (paper ID, summary text)
                 # tuples, which is already the desired format for summarizing.
@@ -213,6 +213,7 @@ class DataPipeline:
                     if summarizer not in cached_summaries:
                         cached_summaries[summarizer] = []
                     cached_summaries[summarizer].extend(results[summarizer])
+                    cached_summaries_count += len(results[summarizer])
                     cached_lookup[(summarizer, paper_id)] = None
 
                 print(f"Loaded {cached_summaries_count} cached summaries.")

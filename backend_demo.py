@@ -2,6 +2,8 @@ from XivMind.backend import DataPipeline
 from XivMind.pipeline import Pipeline
 from XivMind.arxiv.metadatamanager import MetaDataManager
 from XivMind.core.embed.openai_embedder import OpenAIEmbedder
+from XivMind.core.embed.caching_embedder import CachingEmbedder
+from XivMind.core.cache.cache import Cache
 import datetime as dt
 import os
 import asyncio
@@ -40,9 +42,6 @@ if __name__ == "__main__":
             for id in results[category][date]:
                 ids.update({id: None})
 
-    async def get_summaries(papers, agent_name):
-        return await data_pipeline.summarize_abstracts(papers, agent_name=agent_name)
-
     papers = data_pipeline.load_metadata(fields=["title", "abstract"],
                                          ids=ids)
     
@@ -56,23 +55,47 @@ if __name__ == "__main__":
     # TODO: Choose a different summarizer based on the config
     summarizer_name = "DomainExpertSummarizer"
 
+    # async wrapper to run in __main__
+    async def get_summaries(papers, agent_name):
+        return await data_pipeline.summarize_abstracts(papers, agent_name=agent_name)
+    
+    # Data format is dict[summarizer name] = tuple(paper ID, summary text)
     summaries = asyncio.run(get_summaries(papers, agent_name=summarizer_name))
 
     # TODO: Check if already in the cache
-    data_pipeline.cache_summaries(summaries)
+    inserted_count = data_pipeline.cache_summaries(summaries)
+    if inserted_count > 0:
+        print(f"Inserted {inserted_count} new summaries into the cache.")
 
     # TODO: Choose a different embedder based on the config
-    embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=20)
-
-    async def embed_texts(embedder, texts):
-        return await embedder.embed_text(texts)
+    caching_embedder = CachingEmbedder(
+        OpenAIEmbedder(model_spec="text-embedding-3-small", batch_size=20)
+    )
     
     print("Embedding summaries.")
     
-    # Now embed the summaries
-    embeddings = asyncio.run(embed_texts(embedder, [summary for _, summary in summaries[summarizer_name]]))
+    # The CachingEmbedder will check the cache first,
+    # and return anything that is already cached. 
+    #
+    # However, it requires a dictionary with keys as the unique identifiers and 
+    # values as the texts to embed. 
+    embedder_data = {}
+    for summarizer_name in summaries:
+        for paper_id, paper_summary in summaries[summarizer_name]:
+            key = Cache.get_key(
+                agent_name=summarizer_name,
+                model_name=caching_embedder.embedder.model_name,
+                model_spec=caching_embedder.embedder.model_spec,
+                arxiv_id=paper_id,
+                label="abstract"
+            )
+            embedder_data.update({key: paper_summary})
 
-    #data_pipeline.cache_embeddings(embeddings, papers, summaries)
+    # async wrapper to run in __main__
+    async def embed_texts(embedder, texts):
+        return await embedder.embed_text(texts)
+    
+    embeddings = asyncio.run(embed_texts(caching_embedder, embedder_data))
 
     print("Done!")
 
