@@ -7,6 +7,10 @@ from typing import List
 import glob
 import asyncio
 from .core.embed.embedder import Embedder
+from .core.embed.caching_embedder import CachingEmbedder
+from .core.cache.cache import Cache
+from .core.search.faiss_index_manager import FAISSIndexManager
+import numpy as np
 
 class Pipeline:
     model_name = None
@@ -14,22 +18,18 @@ class Pipeline:
     models = None
     config = None
     agents = None
+    agent_links = None
     summarizer = None
+    embedder = None
 
-    def __init__(self, model: str = None, embedding_model: str = None):
+    def __init__(self, model: str, embedding_model: str):
         # Load main paths for the pipeline
         self.config = load_config(open("./XivMind/configs/config.yaml", "r"))
         self.models = self.config["supported_models"]
         self.embedding_models = self.config["supported_embedding_models"]
-    
-        # Allow Pipeline tests with a direct input.
-        if model is None and embedding_model is None:
-            return
         
-        if model is not None:
-            self.prepare_model(model)
-        if embedding_model is not None:
-            self.prepare_embedding_model(embedding_model)
+        self.prepare_model(model)
+        self.prepare_embedding_model(embedding_model)
 
     ######
     # Error handling methods
@@ -73,19 +73,24 @@ class Pipeline:
         else:
             raise ValueError(self._unsupported_model_error(self.model_name))
         
-    def prepare_embedding_model(self, embedding_model: str):
+    def prepare_embedding_model(self, embedding_model: str, cache: bool = False):
         embedding_model_decomposition = self._decompose_model(embedding_model)
 
-        embedding_model = embedding_model_decomposition[0].lower()
-        embedding_model_spec = embedding_model_decomposition[1]
+        self.embedding_model_name = embedding_model_decomposition[0].lower()
+        self.embedding_model_spec = embedding_model_decomposition[1]
 
-        if embedding_model in self.embedding_models:
-            if embedding_model == "openai":
-                self.embedding_model = AsyncOpenAI(model=embedding_model_spec)
+        if self.embedding_model_name in self.embedding_models:
+            embedder = None
+            if self.embedding_model_name == "openai":
+                from openai import OpenAI
+                from .core.embed.openai_embedder import OpenAIEmbedder
+                embedder = OpenAIEmbedder(OpenAI(), self.embedding_model_spec)
             else:
-                raise NotImplementedError(self._unimplemented_model_error(embedding_model))
+                raise ValueError(self._unsupported_model_error(self.model))
+
+            self.embedder = CachingEmbedder(embedder) if cache else embedder
         else:
-            raise ValueError(self._unsupported_model_error(embedding_model))
+            raise NotImplementedError(self._unsupported_model_error(self.embedding_model_name))
     ######
 
     def request_model_from_user(self):
@@ -125,6 +130,8 @@ class Pipeline:
 
         if self.agents is None:
             self.agents = {}
+        if self.agent_links is None:
+            self.agent_links = {}
 
         # Search the agents/summarizers directory for all yml files and
         # load them as agents.
@@ -133,6 +140,8 @@ class Pipeline:
             # top-level folders in agents_path need keys for caching
             if agent_classes[i] not in self.agents:
                 self.agents[agent_classes[i]] = {}
+            if agent_classes[i] not in self.agent_links:
+                self.agent_links[agent_classes[i]] = {}
 
             for file_path in glob.glob(glob_path):
                 # Get the agent model name to store in the internal
@@ -160,30 +169,10 @@ class Pipeline:
                     # it is important that they are not shared across agents.
                     instructions=agent_config["instructions"]
                 )
-    
-    ######
-    # Embedding methods
-    def get_embedder(self) -> Embedder:        
-        if self.embedder is not None:
-            return self.embedder
 
-        if self.model_name == "openai":
-            from openai import AsyncOpenAI
-            from .core.embed.openai_embedder import OpenAIEmbedder
-            self.embedder = OpenAIEmbedder(AsyncOpenAI(), self.model_spec)
-        else:
-            raise ValueError(self._unsupported_model_error(self.model))
+                self.agent_links[agent_classes[i]][agent_name] = agent_config["agent_link"]
 
-        return self.embedder
-
-    def embed(self, text: str):
-        if self.embedder is None:
-            self.get_embedder()
-        
-        self.embedder.embed_text(text)
-    ######
-
-    ######    
+    # TODO: Move to the summarizer class 
     async def summarize_text(self, text: List[str] | str, agent_class: str = "summarizer", 
                              agent_name: str = None,
                              max_concurrent: int = 5) -> str:
@@ -237,21 +226,60 @@ class Pipeline:
 
     ######
 
-    ######
-    # FAISS index methods
-    # Build FAISS index
-    def build_faiss_index(self):
-        print("Loading embeddings...")
-        papers, embeddings = faiss_index.load_embeddings("../data/arxiv_astro_ph_embedded.json")
-        print(f"Loaded {len(embeddings)} embeddings.")
+    def retrieve_top_k_keys(self, query_embedding, top_k: int = 5):
+        faiss_index = FAISSIndexManager()
+        keys, index = faiss_index.load_faiss_index()
 
-        print("Building FAISS index...")
-        index = faiss_index.build_faiss_index(embeddings)
+        # Perform the search
+        _, I = index.search(query_embedding, top_k)
 
-        print("Saving index...")
-        faiss_index.save_faiss_index(index, "../data/faiss_index.index")
-        print("Done. Index saved to ../data/faiss_index.index")
-    ######
+        return [keys[i] for i in I[0]]
+    
+    def retrieve_relevant_papers(self, query_embedding: List[float], agent_name, top_k: int = 5):
+        query_embedding = np.array(query_embedding).astype(float).reshape(1, -1)
+
+        top_keys = self.retrieve_top_k_keys(query_embedding, top_k)
+
+        arxiv_ids = []
+        # Extract arXiv IDs from the keys
+        for key in top_keys:
+            _, _, _, arxiv_id, _ = Cache.parse_key(key)
+            arxiv_ids.append(arxiv_id)
+
+        # TODO: This is a temporary solution to load the metadata. In the future,
+        # need a central database of the papers to make this quicker.
+        from .arxiv.metadatamanager import MetaDataManager
+        from .backend import DataPipeline
+        data_pipeline = DataPipeline(MetaDataManager("arxiv-metadata-oai-snapshot.json"))
+
+        return data_pipeline.load_metadata(fields=["title", "abstract"],
+                                           ids=arxiv_ids)
+
+    async def query_and_respond(self):
+        query = input("Enter a query:")
+        
+        # This is a sync call, since it is only a single text input. It validates
+        # the input text automatically.
+        query_embedding = await self.embedder.embed_text(query)
+
+        # TODO: Make this optional
+        agent_name = "PostSecondaryAssistant"
+        papers = self.retrieve_relevant_papers(query_embedding, agent_name)
+
+        # Augment the query with the relevant papers
+        model_input = f"Question: {query}\n\n"
+        model_input += "Context:\n"
+        for arxiv_id in papers:
+            model_input += f"arXiv:{arxiv_id}\nAbstract: {papers[arxiv_id]['abstract']}\n\n"
+
+        response = await self.agents["researchassistant"][agent_name].run(model_input)
+
+        print("\nAnswer:\n", response.output)
+        print("\nSources:\n")
+        for arxiv_id in papers:
+            print(f"- arXiv:{arxiv_id} Title: {papers[arxiv_id]['title']}")
+        print()
+
 
         
 
