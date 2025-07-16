@@ -28,8 +28,7 @@ paths:
   cache:
     embeddings_index: XivMind/data/cache/embeddings
     embeddings: XivMind/data/cache/embeddings
-  faiss:
-    openai: XivMind/data/faiss/openai
+    faiss: XivMind/data/cache/faiss
 files:
   arxiv:
     metadata: arxiv-metadata-oai-snapshot.json
@@ -38,8 +37,8 @@ files:
   cache:
     embeddings_index: embeddings-index.db
     embeddings: embeddings.h5
-  faiss:
-    openai: openai-faiss.index
+    faiss_index: faiss.index
+    faiss_keys: faiss-keys.pkl
 sql:
   main-path: XivMind/configs/sql_queries
   create-summaries-table: create-summaries-table.sql
