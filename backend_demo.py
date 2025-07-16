@@ -4,9 +4,11 @@ from XivMind.arxiv.metadatamanager import MetaDataManager
 from XivMind.core.embed.openai_embedder import OpenAIEmbedder
 from XivMind.core.embed.caching_embedder import CachingEmbedder
 from XivMind.core.cache.cache import Cache
+from XivMind.core.search.faiss_index_manager import FAISSIndexManager
 import datetime as dt
 import os
 import asyncio
+import numpy as np
 
 if __name__ == "__main__":
     data_pipeline = DataPipeline(MetaDataManager("arxiv-metadata-oai-snapshot.json"))
@@ -49,7 +51,7 @@ if __name__ == "__main__":
         print("No papers found for the given IDs.")
         exit(0)
 
-    pipeline = Pipeline("OpenAI:gpt-3.5-turbo")
+    pipeline = Pipeline("OpenAI:gpt-3.5-turbo", "OpenAI:text-embedding-3-small")
     data_pipeline.load_pipeline(pipeline, load_agents=True)
 
     # TODO: Choose a different summarizer based on the config
@@ -96,6 +98,33 @@ if __name__ == "__main__":
         return await embedder.embed_text(texts)
     
     embeddings = asyncio.run(embed_texts(caching_embedder, embedder_data))
+
+    # Build the FAISS index from the embeddings
+    if len(embeddings) == 0:
+        print("No embeddings to index.")
+        exit(0)
+
+    print("Building FAISS index.")
+
+    # NOTE: Order matters here because the FAISS index must align with the 
+    # cache order.
+    key_list = []
+    embeddings_list = []
+    for key in embeddings.keys():
+        key_list.append(key)
+        embeddings_list.append(embeddings[key])
+
+    faiss_manager = FAISSIndexManager()
+
+    embeddings_array = np.array([embedding for embedding in embeddings_list], 
+                                dtype=float)
+
+    if embeddings_array.ndim != 2:
+        print(f"Error: Embeddings array has invalid shape {embeddings_array.shape}.")
+        exit(0)
+
+    faiss_index = faiss_manager.build_faiss_index(embeddings_array)
+    faiss_manager.save_faiss_index(faiss_index, key_list)
 
     print("Done!")
 
