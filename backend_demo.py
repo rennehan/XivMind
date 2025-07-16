@@ -33,7 +33,7 @@ if __name__ == "__main__":
         exit(0)
 
     # Abstracts are needed to summarize and embed. Flatten the results 
-    # dictionary into a listç of IDs to grab from the JSON file.
+    # dictionary into a list of IDs to grab from the JSON file.
     ids = {}
     for category in results.keys():
         for date in results[category].keys():
@@ -46,6 +46,10 @@ if __name__ == "__main__":
     papers = data_pipeline.load_metadata(fields=["title", "abstract"],
                                          ids=ids)
     
+    if len(papers) == 0:
+        print("No papers found for the given IDs.")
+        exit(0)
+
     pipeline = Pipeline("OpenAI:gpt-3.5-turbo")
     data_pipeline.load_pipeline(pipeline, load_agents=True)
 
@@ -55,7 +59,7 @@ if __name__ == "__main__":
     summaries = asyncio.run(get_summaries(papers, agent_name=summarizer_name))
 
     # TODO: Check if already in the cache
-    data_pipeline.cache_summaries(summaries, papers)
+    data_pipeline.cache_summaries(summaries)
 
     # TODO: Choose a different embedder based on the config
     embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=20)
@@ -63,10 +67,12 @@ if __name__ == "__main__":
     async def embed_texts(embedder, texts):
         return await embedder.embed_text(texts)
     
+    print("Embedding summaries.")
+    
     # Now embed the summaries
     embeddings = asyncio.run(embed_texts(embedder, [summary for _, summary in summaries[summarizer_name]]))
 
-    data_pipeline.cache_embeddings(embeddings, papers, summaries)
+    #data_pipeline.cache_embeddings(embeddings, papers, summaries)
 
     print("Done!")
 
