@@ -29,7 +29,7 @@ class OpenAIEmbedder(Embedder):
     
     def _embed_text_sync(self, texts: List[str]) -> List[List[float]]:
         embeddings = []
-        for i in tqdm(range(0, len(texts), self.batch_size), desc="Embedding batches"):
+        for i in range(0, len(texts), self.batch_size):
             batch = texts[i:i+self.batch_size]
             try:
                 response = self.client.embeddings.create(

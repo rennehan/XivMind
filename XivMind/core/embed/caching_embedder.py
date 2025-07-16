@@ -73,6 +73,36 @@ class CachingEmbedder(Embedder):
                 batch = keys[i:i+self.embedder.config["cache"]["batch_size"]]
                 cursor.executemany("INSERT OR IGNORE INTO cache (key) VALUES (?)", [(key,) for key in batch])
 
+    def get_all_cached_embeddings_by_agent(self, agent_name: str) -> Dict:
+        embeddings_path = self.config["paths"]["cache"]["embeddings"]
+        embeddings_file = embeddings_path + "/" + self.config["paths"]["cache"]["embeddings_file"]
+        
+        with h5py.File(embeddings_file, "r") as f:
+            group_path = f"/{agent_name}/{self.model_name}/{self.model_spec}"
+            if group_path not in f:
+                raise NotImplementedError(f"No embeddings found for agent '{agent_name}' with model '{self.model_name}:{self.model_spec}' in cache.")
+            
+            key_fragment = f"{agent_name}:{self.model_name}:{self.model_spec}:"
+            papers = []
+            embeddings = []
+            for key in f[group_path].keys():
+                if not key.startswith(key_fragment):
+                    continue
+                
+                # The key format is agent_name:model_name:model_spec:arxiv_id:label
+                _, _, _, arxiv_id, label = Cache.parse_key(key)
+
+                # TODO: IMPORTANT: Currently only abstracts are cached.
+                if label != "abstract":
+                    continue
+
+                papers.append(arxiv_id)
+                embeddings.append(f[group_path][key][...])
+
+        # NOTE: Order matters here, as the FAISS index aligns with the
+        # cache order.
+        return papers, embeddings
+
     def get_cached_embeddings(self, keys: List[str]) -> Dict:
         # Checking the existence of the keys in the cache index overwrites
         # the user input keys with only those that exist in the cache.
