@@ -5,10 +5,8 @@ from .core.sql import SQLQueryContainer
 from .pipeline import Pipeline
 from typing import Dict, List, Tuple
 from openai import OpenAI
-import pickle 
-import json 
-import os
 import sqlite3
+from tqdm import tqdm
 
 class DataPipeline:
     pipeline = None
@@ -27,7 +25,7 @@ class DataPipeline:
         return ("Pipeline not loaded. Use load_pipeline() to load a Pipeline instance.")
 
     def load_metadata(self, fields: list[str] = [], limit: int = None, ids: Dict = None) -> defaultdict:
-        return self.data_manager.load_metadata(fields=fields, limit=limit)
+        return self.data_manager.load_metadata(fields=fields, limit=limit, ids=ids)
 
     def build_metadata_index(self, cache: bool = True, limit: int = None) -> defaultdict:
         return self.data_manager.build_metadata_index(cache=cache, limit=limit)
@@ -68,7 +66,7 @@ class DataPipeline:
 
 
             if keys is None:
-                c.executemany(
+                c.execute(
                     queries.retrieve("select-summaries-by-primary-key"),
                     keys_values
                 )
@@ -112,6 +110,7 @@ class DataPipeline:
 
                 query_name += "-and-".join(query_parts)
 
+                c.execute("BEGIN")
                 for key_value in keys_values:
                     c.execute(
                         queries.retrieve(query_name),
@@ -140,7 +139,7 @@ class DataPipeline:
 
         return summaries
 
-    def cache_summaries(self, summaries: str) -> int:
+    def cache_summaries(self, summaries: Dict) -> int:
         """
         Cache summaries to disk. The input summaries should be a dictionary that
         maps the summarizer name to the dictionary of key->value pairs, where
@@ -178,7 +177,9 @@ class DataPipeline:
 
         return inserted_count
     
-    async def summarize_abstracts(self, papers: Dict, agent_class: str = "summarizer", 
+    async def summarize_abstracts(self, 
+                                  papers: Dict, 
+                                  agent_class: str = "summarizer", 
                                   agent_name: str = None,
                                   cache: bool = True) -> str:
         # TODO: Should this really be interactive? 
@@ -189,42 +190,55 @@ class DataPipeline:
         if cache:
             full_model_name = f"{self.model_name}:{self.model_spec}"
             keys = ("summarizer_name", "full_model_name", "arxiv_id") if agent_name is not None else ("full_model_name", "arxiv_id")
+            keys_values = []
             print(f"Checking for cached summaries for model {full_model_name}.")
             cached_summaries = {}
+            cached_lookup = {}
             cached_summaries_count = 0
 
+            for paper_id in papers.keys():
+                keys_values.append((agent_name, full_model_name, paper_id) if agent_name is not None else (full_model_name, paper_id))
+
+            results = self.load_summaries(
+                keys=keys,
+                keys_values=keys_values
+            )
+
+            if len(results) > 0:
+                cached_summaries_count += len(results)
+                # load_summaries() returns a dictionary that maps
+                # the summarizer name to a list of (paper ID, summary text)
+                # tuples, which is already the desired format for summarizing.
+                for summarizer in results.keys():
+                    if summarizer not in cached_summaries:
+                        cached_summaries[summarizer] = []
+                    cached_summaries[summarizer].extend(results[summarizer])
+                    cached_lookup[(summarizer, paper_id)] = None
+
+                print(f"Loaded {cached_summaries_count} cached summaries.")
+
+                if cached_summaries_count == len(papers):
+                    # All summaries were cached, so return them directly
+                    return cached_summaries
+            
         paper_ids = []
         abstracts = []
         for paper_id in papers.keys():
-            if cache:
-                # TODO: keys order matters here and really shouldn't
-                keys_values = (agent_name, full_model_name, paper_id) if agent_name is not None else (full_model_name, paper_id)
-                results = self.load_summaries(
-                    keys=keys,
-                    keys_values=keys_values
-                )
-
-                if len(results) > 0:
-                    cached_summaries_count += len(results)
-                    # load_summaries() returns a dictionary that maps
-                    # the summarizer name to a list of (paper ID, summary text)
-                    # tuples, which is already the desired format for summarizing.
-                    for summarizer in results.keys():
-                        if summarizer not in cached_summaries:
-                            cached_summaries[summarizer] = []
-                        cached_summaries[summarizer].extend(results[summarizer])
+            if cache and cached_summaries_count > 0:
+                # If caching is enabled and there are cached summaries,
+                # only summarize papers that do not already have cached summaries.
+                already_cached = False
+                for summarizer in cached_summaries.keys():
+                    if (summarizer, paper_id) in cached_lookup:
+                        already_cached = True
+                        break
+                if already_cached:
                     continue
 
             paper_ids.append(paper_id)
             abstracts.append(papers[paper_id]["abstract"])
 
         if cache:
-            print(f"Loaded {cached_summaries_count} cached summaries.")
-
-            if len(cached_summaries) > 0 and len(abstracts) == 0:
-                # All summaries were cached, so return them directly
-                return cached_summaries
-            
             print(f"Summarizing the remaining {len(abstracts)} abstracts.")
 
         summaries = await self.pipeline.summarize_text(abstracts, 

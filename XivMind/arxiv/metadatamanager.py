@@ -32,7 +32,7 @@ class MetaDataManager:
         
         return self.config
     
-    def load_metadata(self, fields: List[str] = [], limit: int = None, ids: Dict = None) -> defaultdict:
+    def load_metadata(self, fields: List[str] = [], limit: int = None, ids: Dict = None) -> Dict:
         if len(fields) == 0:
             fields = self.config["fields"]["metadata"]
             print("Assuming all fields are requested:")
@@ -43,7 +43,7 @@ class MetaDataManager:
                     raise ValueError(self._unsupported_field_error(field))
         
         count = 0
-        papers = defaultdict(lambda: defaultdict)
+        papers = {}
 
         with open(self._get_metadata_file_path(self.file_name), "r") as f:
             for line in tqdm(f, desc="Loading all metadata."):
@@ -51,11 +51,11 @@ class MetaDataManager:
                     paper = json.loads(line)
 
                     # ID filter to easily use the metadata search index
-                    if ids and ids.get(paper["id"]):
+                    if ids and paper["id"] not in ids:
                         continue
 
                     paper_data = {field: paper[field] for field in fields if field != "id"}
-                    papers[paper["id"]] = paper_data
+                    papers.update({paper["id"]: paper_data})
 
                     count += 1
                     if limit and count >= limit:
