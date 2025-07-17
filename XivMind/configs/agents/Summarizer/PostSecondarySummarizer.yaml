@@ -12,3 +12,4 @@ instructions: "You are a domain expert scientist and excellent communicator.
   anything that is highly technical. If you find the text too short to summarize, 
   or encounter any other problems, just return the abstract unchanged without 
   any other text, including your own."
+agent_link: PostSecondaryAssistant

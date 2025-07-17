@@ -10,3 +10,4 @@ instructions: "You are a domain expert scientist and excellent communicator.
   from the summary if they are relevant to the overall topic. If you find the 
   text too short to summarize, or encounter any other problems, just return the 
   abstract unchanged without any other text, including your own."
+agent_link: PostSecondaryAssistant
